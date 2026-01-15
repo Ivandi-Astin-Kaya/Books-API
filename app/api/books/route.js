@@ -1,41 +1,39 @@
+// app/api/books/route.js
 import { NextResponse } from 'next/server';
+// Mundur 3 tingkat dari route.js -> books -> api -> app -> baru ke lib
+import { supabase } from '../../../lib/supabase';
 
 export async function GET(request) {
-  // 1. Ambil kata kunci pencarian dari URL (kalau ada)
   const { searchParams } = new URL(request.url);
-  const query = searchParams.get('q'); // misal: ?q=jaringan
+  const query = searchParams.get('q');
 
   try {
-    // 2. Tembak ke API Vercel yang sudah jadi
-    const res = await fetch('https://books-api-fawn.vercel.app/api/books', {
-      cache: 'no-store', // Agar data selalu baru
-    });
+    // 1. Ambil data LANGSUNG dari tabel Supabase Anda
+    // Ganti 'books' dengan nama tabel Anda di Supabase
+    let { data: books, error } = await supabase
+      .from('text_books') 
+      .select('*');
 
-    // Cek kalau API Vercel-nya error
-    if (!res.ok) {
-      throw new Error(`Gagal mengambil data: ${res.status}`);
+    if (error) {
+      throw error;
     }
 
-    const jsonResponse = await res.json();
-    
-    // 3. Ambil Array bukunya (karena formatnya { success: true, data: [...] })
-    let books = jsonResponse.data || [];
-
-    // 4. Fitur Search (Filter Manual di sini)
-    // Karena API Vercel mungkin ga punya fitur search bawaan, kita filter di "jembatan" ini
-    if (query) {
+    // 2. Fitur Search Manual (opsional, atau bisa pakai filter Supabase)
+    if (query && books) {
       const lowerQuery = query.toLowerCase();
       books = books.filter(book => 
-        (book.title && book.title.toLowerCase().includes(lowerQuery)) ||
-        (book.author && book.author.toLowerCase().includes(lowerQuery))
+        (book.title?.toLowerCase().includes(lowerQuery)) ||
+        (book.author?.toLowerCase().includes(lowerQuery))
       );
     }
 
-    // 5. Kirim data yang sudah bersih ke Frontend
-    return NextResponse.json(books);
+    return NextResponse.json(books || []);
 
   } catch (error) {
-    console.error("Error API:", error);
-    return NextResponse.json({ error: "Gagal mengambil data buku" }, { status: 500 });
+    console.error("Supabase Error:", error.message);
+    return NextResponse.json(
+      { error: "Gagal mengambil data dari Supabase", detail: error.message }, 
+      { status: 500 }
+    );
   }
 }
